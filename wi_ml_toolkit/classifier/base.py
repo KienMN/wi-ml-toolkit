@@ -18,75 +18,53 @@ confusion_matrix = cm_with_percentage
 
 class Classifier:
 
-    def __init__(self, train_set, val_set, data_file, header, val_size,
-                 feature_cols, label_col, feature_degree, feature_scaling,
-                 include, preprocess, proportional, keep_order):
+    # def __init__(self, val_size, feature_cols, label_col, feature_degree, 
+    #              feature_scaling, including_classes, preprocess, shuffle):
+    def __init__(self, **params):
 
-        if preprocess:
-            keep_order = True
-
-        if not feature_cols:
-            if train_set is None:
-                feature_cols = list(range(6))
-            else:
-                feature_cols = list(range(train_set.shape[1]-1))
-
-        self.cols = feature_cols + [label_col]
-        self.include = include
-        self.preprocess = preprocess
-
-        if data_file is not None:
-            data = pd.read_csv(data_file, header=header).values
-            data = filt_data(data[:, self.cols], self.include)
-            if self.preprocess:
-                data = pre_process(data)
-            train_set, val_set = split_data(data, val_size, proportional, keep_order)
-        elif train_set is not None:
-            if val_set is None:
-                train_set = filt_data(train_set[:, self.cols], self.include)
-                if self.preprocess:
-                    train_set = pre_process(train_set)
-                train_set, val_set = split_data(train_set, val_size, proportional, keep_order)
-            else:
-                train_set = filt_data(train_set[:, self.cols], self.include)
-                val_set = filt_data(val_set[:, self.cols], self.include)
-                if self.preprocess:
-                    train_set = pre_process(train_set)
-                    val_set = pre_process(val_set)
-        else:
-            raise RuntimeError('Missing data')
-
-        self.X_train = train_set[:, :-1]
-        self.X_val = val_set[:, :-1]
-        self.y_train = train_set[:, -1].astype('int')
-        self.y_val = val_set[:, -1].astype('int')
-
-        self.le = LabelEncoder()
-        self.y_train = self.le.fit_transform(self.y_train)
-        self.y_val = self.le.transform(self.y_val)
-
-        self.num_labels = max(self.y_train) + 1
-        self.labels = [i for i in range(self.num_labels)]
-        self.labels_origin = self.le.inverse_transform(self.labels).tolist()
-
-        self.poly = PolynomialFeatures(feature_degree, include_bias=False)
-        self.X_train = self.poly.fit_transform(self.X_train)
-        if len(self.X_val > 0):
-            self.X_val = self.poly.transform(self.X_val)
-
-        self.num_samples, self.num_features = self.X_train.shape
-
-        self.feature_scaling = feature_scaling
-        self.sc = StandardScaler()
-        if feature_scaling:
-            self.X_train = self.sc.fit_transform(self.X_train)
-            if len(self.X_val > 0):
-                self.X_val = self.sc.transform(self.X_val)
+        self.val_size = params.pop('val_size')
+        self.feature_degree = params.pop('feature_degree')
+        self.feature_scaling = params.pop('feature_scaling')
+        self.including_classes = params.pop('including_classes')
+        self.preprocess = params.pop('preprocess')
+        self.shuffle = params.pop('shuffle') and self.preprocess
+        
+        self.model_params = params
 
         self.his = {'acc': None, 'loss': None, 'val_acc': None, 'val_loss': None}
         self.model = None
         self.cm = None
         self.score = 0
+
+    def preprocess(self, X, y):
+        y = y.astype('int')
+
+        self.le = LabelEncoder()
+        y = self.le.fit_transform(y)
+
+        self.num_labels = max(y) + 1
+        self.labels = [i for i in range(self.num_labels)]
+        self.labels_origin = self.le.inverse_transform(self.labels).tolist()
+
+        X_train, X_val, y_train, y_val = split_data(X, y, val_size, self.shuffle)
+
+        if self.add_cluster_features:
+            X_train, y_train = add_cluster_features(X_train, y_train)
+            X_val, y_val = add_cluster_features(X_val, y_val)
+        
+        self.poly = PolynomialFeatures(self.feature_degree, including_classes_bias=False)
+        X_train = self.poly.fit_transform(X_train)
+        if len(X_val) > 0:
+            X_val = self.poly.transform(X_val)
+
+        self.num_samples, self.num_features = X_train.shape
+        
+        self.sc = StandardScaler()
+        if self.feature_scaling:
+            X_train = self.sc.fit_transform(X_train)
+            if len(X_val) > 0:
+                X_val = self.sc.transform(X_val)
+
 
     def evaluate_helper(self, X, y, radius, verbose):
         prob = self.model.predict_proba(X)
@@ -123,23 +101,9 @@ class Classifier:
 
             self.score = accuracy * 100
 
-    def evaluate(self, X=None, y=None, data=None, data_file=None, header=None,
-                 radius=0, verbose=False):
+    def evaluate(self, X, y, radius=0, verbose=False):
 
-        if X is not None and y is not None:
-            data = np.append(X, np.array(y).reshape(-1,1), axis=1)
-        elif data is not None:
-            pass
-        elif data_file is not None:
-            if verbose:
-                print('\nEvaluating on ', data_file, '...', sep='')
-            data = pd.read_csv(data_file, header=header).values
-        else:
-            raise RuntimeError('Missing data')
-
-        data = filt_data(data[:, self.cols], self.include)
-        X = data[:, :-1]
-        y = data[:, -1]
+        X, y = filt_data(X, y, self.including_classes)
         if self.preprocess:
             X = add_features(X)
 
@@ -152,23 +116,9 @@ class Classifier:
 
         return {'acc': accuracy, 'loss': loss}
 
-    def judge(self, X=None, y=None, data=None, data_file=None, header=None,
-              radius=0, verbose=False, threshold=0.8):
+    def judge(self, X, y, radius=0, verbose=False, threshold=0.8):
 
-        if X is not None and y is not None:
-            data = np.append(X, np.array(y).reshape(-1,1), axis=1)
-        elif data is not None:
-            pass
-        elif data_file is not None:
-            if verbose:
-                print('\nJudging on ', data_file, '...', sep='')
-            data = pd.read_csv(data_file, header=header).values
-        else:
-            raise RuntimeError('Missing data')
-
-        data = filt_data(data[:, self.cols], self.include)
-        X = data[:, :-1]
-        y = data[:, -1]
+        X, y = filt_data(X, y, self.including_classes)
         if self.preprocess:
             X = add_features(X)
 
@@ -189,15 +139,7 @@ class Classifier:
 
         return cm
 
-    def probability(self, X=None, data_file=None, header=None):
-
-        if data_file is not None:
-            data = pd.read_csv(data_file, header=header).values
-            X = data[:, self.cols[:-1]]
-        elif X is not None:
-            X = np.array(X[:, self.cols[:-1]])
-        else:
-            raise RuntimeError('Missing data')
+    def probability(self, X):
 
         if self.preprocess:
             X = add_features(X)
@@ -207,16 +149,7 @@ class Classifier:
 
         return self.model.predict_proba(X)
 
-    def predict(self, X=None, data_file=None, header=None, radius=0,
-                threshold=0.0):
-
-        if data_file is not None:
-            data = pd.read_csv(data_file, header=header).values
-            X = data[:, self.cols[:-1]]
-        elif X is not None:
-            X = np.array(X[:, self.cols[:-1]])
-        else:
-            raise RuntimeError('Missing data')
+    def predict(self, X=None, radius=0, threshold=0.0):
 
         if self.preprocess:
             X = add_features(X)
@@ -234,16 +167,7 @@ class Classifier:
 
         return pred
 
-    def get_result(self, X=None, data_file=None, header=None, radius=0,
-                   threshold=0.0):
-
-        if data_file is not None:
-            data = pd.read_csv(data_file, header=header).values
-            X = data[:, self.cols[:-1]]
-        elif X is not None:
-            X = np.array(X[:, self.cols[:-1]])
-        else:
-            raise RuntimeError('Missing data')
+    def get_result(self, X, radius=0, threshold=0.0):
 
         if self.preprocess:
             X = add_features(X)
