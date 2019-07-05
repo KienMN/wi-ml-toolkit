@@ -26,8 +26,8 @@ class Classifier:
         self.feature_degree = params.pop('feature_degree')
         self.feature_scaling = params.pop('feature_scaling')
         self.including_classes = params.pop('including_classes')
-        self.preprocess = params.pop('preprocess')
-        self.shuffle = params.pop('shuffle') and self.preprocess
+        self.add_cluster_features = params.pop('add_cluster_features')
+        self.shuffle = params.pop('shuffle') and self.add_cluster_features
         
         self.model_params = params
 
@@ -36,7 +36,7 @@ class Classifier:
         self.cm = None
         self.score = 0
 
-    def preprocess(self, X, y):
+    def preprocess_data(self, X, y):
         y = y.astype('int')
 
         self.le = LabelEncoder()
@@ -46,13 +46,13 @@ class Classifier:
         self.labels = [i for i in range(self.num_labels)]
         self.labels_origin = self.le.inverse_transform(self.labels).tolist()
 
-        X_train, X_val, y_train, y_val = split_data(X, y, val_size, self.shuffle)
+        X_train, X_val, y_train, y_val = split_data(X, y, self.val_size, self.shuffle)
 
         if self.add_cluster_features:
             X_train, y_train = add_cluster_features(X_train, y_train)
             X_val, y_val = add_cluster_features(X_val, y_val)
         
-        self.poly = PolynomialFeatures(self.feature_degree, including_classes_bias=False)
+        self.poly = PolynomialFeatures(self.feature_degree, include_bias=False)
         X_train = self.poly.fit_transform(X_train)
         if len(X_val) > 0:
             X_val = self.poly.transform(X_val)
@@ -65,6 +65,18 @@ class Classifier:
             if len(X_val) > 0:
                 X_val = self.sc.transform(X_val)
 
+        return X_train, X_val, y_train, y_val
+
+    def preprocess_X(self, X):
+        
+        if self.add_cluster_features:
+            X = add_features(X)
+
+        X = self.poly.transform(X)
+        if self.feature_scaling:
+            X = self.sc.transform(X)
+
+        return X
 
     def evaluate_helper(self, X, y, radius, verbose):
         prob = self.model.predict_proba(X)
@@ -104,12 +116,8 @@ class Classifier:
     def evaluate(self, X, y, radius=0, verbose=False):
 
         X, y = filt_data(X, y, self.including_classes)
-        if self.preprocess:
-            X = add_features(X)
 
-        X = self.poly.transform(X)
-        if self.feature_scaling:
-            X = self.sc.transform(X)
+        X = self.preprocess_X(X)
         y = self.le.transform(y)
 
         accuracy, loss = self.evaluate_helper(X, y, radius, verbose)
@@ -119,12 +127,8 @@ class Classifier:
     def judge(self, X, y, radius=0, verbose=False, threshold=0.8):
 
         X, y = filt_data(X, y, self.including_classes)
-        if self.preprocess:
-            X = add_features(X)
 
-        X = self.poly.transform(X)
-        if self.feature_scaling:
-            X = self.sc.transform(X)
+        X = self.preprocess_X(X)
         y = self.le.transform(y)
 
         prob = self.model.predict_proba(X)
@@ -141,21 +145,13 @@ class Classifier:
 
     def probability(self, X):
 
-        if self.preprocess:
-            X = add_features(X)
-        X = self.poly.transform(X)
-        if self.feature_scaling:
-            X = self.sc.transform(X)
+        X = self.preprocess_X(X)
 
         return self.model.predict_proba(X)
 
     def predict(self, X=None, radius=0, threshold=0.0):
 
-        if self.preprocess:
-            X = add_features(X)
-        X = self.poly.transform(X)
-        if self.feature_scaling:
-            X = self.sc.transform(X)
+        X = self.preprocess_X(X)
 
         prob = self.model.predict_proba(X)
         pred = prob.argmax(axis=1)
@@ -169,11 +165,7 @@ class Classifier:
 
     def get_result(self, X, radius=0, threshold=0.0):
 
-        if self.preprocess:
-            X = add_features(X)
-        X = self.poly.transform(X)
-        if self.feature_scaling:
-            X = self.sc.transform(X)
+        X = self.preprocess_X(X)
 
         prob = self.model.predict_proba(X)
         pred = prob.argmax(axis=1)

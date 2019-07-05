@@ -31,12 +31,13 @@ def generate_features(X, radius, features='mean-std'):
 
     return new_features
 
-def add_features(X, y, trim=False, radius=3):
+def add_features(X, trim=False, radius=3):
 
     X_processed = np.concatenate((X, 
                                   generate_features(X, radius, features='mean-std'),
                                   # generate_features(X, radius, features='diff'),
-                                 axis=1))
+                                  ),
+                                 axis=1)
     if trim:
         return X_processed[radius:-radius]
 
@@ -129,7 +130,7 @@ def add_cluster_features(X, y, clustering=False, trim=False, radius=3):
 def split_data(X, y, val_size=0.2, proportional=False, shuffle=False):
 
     if val_size == 0:
-        return X, y, X[:0], y[:0]
+        return X, X[:0], y, y[:0]
 
     if proportional:
         sort_idx = np.argsort(y)
