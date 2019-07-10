@@ -8,16 +8,37 @@ from .base import *
 from statistics import mean
 
 class NeuralNetworkClassifier(Classifier):
+    
+    default_preprocess_params = dict(
+        val_size = 0.2,
+        feature_degree = 1,
+        feature_scaling = True,
+        including_classes = None,
+        add_cluster_features = True,
+        shuffle = False
+    )
+    
+    default_model_params = dict(
+        hidden_layer_sizes = [10, 20, 10],
+        activation = 'elu',
+        algorithm = 'backprop', 
+        batch_size = None, 
+        num_epochs = 10000,
+        optimizer = 'nadam', 
+        learning_rate = 0.001, 
+        warm_up = False, 
+        decay = 1e-6,
+        population = 50, 
+        sigma = 0.01, 
+        boosting_ops = 0, 
+    )
 
-    def __init__(self, train_set=None, val_set=None, data_file=None, header=None,
-                 val_size=0.2, feature_cols=None, label_col=-1, feature_degree=1,
-                 include=None, preprocess=True):
+    def __init__(self, **params):
+        default_params = {**self.default_preprocess_params, 
+                          **self.default_model_params}
+        default_params.update(params)
 
-        super().__init__(train_set, val_set, data_file, header, val_size,
-                         feature_cols, label_col, feature_degree, True,
-                         include, preprocess, True, True)
-
-        self.structure()
+        super().__init__(**default_params)
 
     def structure(self, hidden_layer_sizes=[10,20,10], activation='elu'):
 
@@ -43,21 +64,33 @@ class NeuralNetworkClassifier(Classifier):
                              kernel_regularizer=l1_l2(0.0),
                              use_bias=False))
 
-    def fit(self, algorithm='backprop', batch_size=None, num_epochs=10000,
-            optimizer='nadam', learning_rate=0.001, warm_up=False, decay=1e-6,
-            population = 50, sigma = 0.01, boosting_ops = 0, verbose=False):
+    def fit(self, X, y, verbose=False):
+        self.X_train, self.X_val, self.y_train, self.y_val = self.preprocess_data(X, y)
 
-            if algorithm == 'backprop':
-                self.train_backprop(batch_size, num_epochs, optimizer,
-                                    learning_rate, warm_up, decay, verbose)
-            elif algorithm == 'evolution':
-                self.train_evolution(batch_size, num_epochs, population, sigma,
-                                     learning_rate, boosting_ops, optimizer,
-                                     decay, verbose)
-            else:
-                raise RuntimeError('Invalid algorithm')
+        if hasattr(self, 'model'):
+            self.structure(hidden_layer_sizes=self.model_params['hidden_layer_sizes'],
+                           activation=self.model_params['activation'])
 
-            return self.his
+        train_params = {k: v for k, v in self.model_params.items() 
+                        if k not in ['hidden_layer_sizes', 'activation']}
+        
+        return self.__fit(verbose=verbose, **train_params)
+
+    def __fit(self, algorithm='backprop', batch_size=None, num_epochs=10000,
+              optimizer='nadam', learning_rate=0.001, warm_up=False, decay=1e-6,
+              population=50, sigma=0.01, boosting_ops=0, verbose=False):
+
+        if algorithm == 'backprop':
+            self.train_backprop(batch_size, num_epochs, optimizer,
+                                learning_rate, warm_up, decay, verbose)
+        elif algorithm == 'evolution':
+            self.train_evolution(batch_size, num_epochs, population, sigma,
+                                 learning_rate, boosting_ops, optimizer,
+                                 decay, verbose)
+        else:
+            raise RuntimeError('Invalid algorithm')
+
+        return self.his
 
     def train_backprop(self, batch_size, num_epochs, optimizer, learning_rate,
                        warm_up, decay, verbose):
@@ -256,29 +289,11 @@ class NeuralNetworkClassifier(Classifier):
             self.score, _ = self.evaluate_helper(self.X_val, self.y_val,
                                                  radius, verbose)
 
-    def judge(self, X=None, y=None, data=None, data_file=None, header=None,
-              radius=0, verbose=False, threshold=0.8):
+    def judge(self, X, y, radius=0, verbose=False, threshold=0.8):
 
-        if X is not None and y is not None:
-            data = np.append(X, np.array(y).reshape(-1,1), axis=1)
-        elif data is not None:
-            pass
-        elif data_file is not None:
-            if verbose:
-                print('\Judging on ', data_file, '...', sep='')
-            data = pd.read_csv(data_file, header=header).values
-        else:
-            raise RuntimeError('Missing data')
+        X, y = filt_data(X, y, self.including_classes)
 
-        data = filt_data(data[:, self.cols], self.include)
-        X = data[:, :-1]
-        y = data[:, -1]
-        if self.preprocess:
-            X = add_features(X)
-
-        X = self.poly.transform(X)
-        if self.feature_scaling:
-            X = self.sc.transform(X)
+        X = self.preprocess_X(X)
         y = self.le.transform(y)
 
         prob = self.model.predict(X, verbose=0)
@@ -293,7 +308,7 @@ class NeuralNetworkClassifier(Classifier):
 
         return cm
 
-    def probability(self, X=None, data_file=None, header=None):
+    def probability(self, X):
 
         if data_file is not None:
             data = pd.read_csv(data_file, header=header).values
@@ -303,30 +318,13 @@ class NeuralNetworkClassifier(Classifier):
         else:
             raise RuntimeError('Missing data')
 
-        if self.preprocess:
-            X = add_features(X)
-        X = self.poly.transform(X)
-        if self.feature_scaling:
-            X = self.sc.transform(X)
+        X = self.preprocess_X(X)
 
         return self.model.predict(X, verbose=0)
 
-    def predict(self, X=None, data_file=None, header=None, radius=0,
-                threshold=0.0):
+    def predict(self, X, radius=0, threshold=0.0):
 
-        if data_file is not None:
-            data = pd.read_csv(data_file, header=header).values
-            X = data[:, self.cols[:-1]]
-        elif X is not None:
-            X = np.array(X[:, self.cols[:-1]])
-        else:
-            raise RuntimeError('Missing data')
-
-        if self.preprocess:
-            X = add_features(X)
-        X = self.poly.transform(X)
-        if self.feature_scaling:
-            X = self.sc.transform(X)
+        X = self.preprocess_X(X)
 
         prob = self.model.predict(X, verbose=0)
         pred = prob.argmax(axis=1)
@@ -338,22 +336,9 @@ class NeuralNetworkClassifier(Classifier):
 
         return pred
 
-    def get_result(self, X=None, data_file=None, header=None, radius=0,
-                   threshold=0.0):
+    def get_result(self, X, radius=0, threshold=0.0):
 
-        if data_file is not None:
-            data = pd.read_csv(data_file, header=header).values
-            X = data[:, self.cols[:-1]]
-        elif X is not None:
-            X = np.array(X[:, self.cols[:-1]])
-        else:
-            raise RuntimeError('Missing data')
-
-        if self.preprocess:
-            X = add_features(X)
-        X = self.poly.transform(X)
-        if self.feature_scaling:
-            X = self.sc.transform(X)
+        X = self.preprocess_X(X)
 
         prob = self.model.predict(X, verbose=0)
         pred = prob.argmax(axis=1)

@@ -7,20 +7,37 @@ from .base import *
 
 class KNearestNeighborsClassifier(Classifier):
 
-    def __init__(self, train_set=None, val_set=None, data_file=None, header=None,
-                 val_size=0.2, feature_cols=None, label_col=-1,
-                 feature_degree=1, include=None, preprocess=False):
+    default_preprocess_params = dict(
+        val_size = 0.0,
+        feature_degree = 1,
+        feature_scaling = True,
+        including_classes = None,
+        add_cluster_features = False,
+        shuffle = False
+    )
+    
+    default_model_params = dict(
+        num_neighbors=100, 
+        p=1,
+        metric='minkowski'
+    )
 
-        super().__init__(train_set, val_set, data_file, header, val_size,
-                         feature_cols, label_col, feature_degree, True,
-                         include, preprocess, True, False)
+    def __init__(self, **params):
+        default_params = {**self.default_preprocess_params, 
+                          **self.default_model_params}
+        default_params.update(params)
 
-    def fit(self, num_neighbors=100, p=1, verbose=False):
+        super().__init__(**default_params)
+
+        self.model_params['n_neighbors'] = self.model_params.pop('num_neighbors')
+
+        self.model = Model(**self.model_params)
+
+    def fit(self, X, y, verbose=False):
+        self.X_train, self.X_val, self.y_train, self.y_val = self.preprocess_data(X, y)
 
         if verbose:
             print('Using K-Nearest Neighbors Classifier...')
-
-        self.model = Model(n_neighbors=num_neighbors, metric='minkowski', p=p)
 
         self.model.fit(self.X_train, self.y_train)
 
