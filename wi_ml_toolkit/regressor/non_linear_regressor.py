@@ -27,8 +27,8 @@ class NonLinearRegressor():
         self.parameter_list = [symbols(parameter) for parameter in parameters]
         self.string_function = string_function
         # print(parameter_list)
-        if 'e' in string_function:
-            parameter_list.append(symbols('e'))
+        if 'e' in self.string_function:
+            self.parameter_list.append(symbols('e'))
         # self.lambda_function = sympy2lambda(variable_list, parameter_list, string_function)
         self.popt = None
         self.pcov = None
