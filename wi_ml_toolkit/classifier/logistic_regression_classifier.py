@@ -7,23 +7,38 @@ from .base import *
 
 class LogisticRegressionClassifier(Classifier):
 
-    def __init__(self, train_set=None, val_set=None, data_file=None, header=None,
-                 val_size=0.2, feature_cols=None, label_col=-1,
-                 feature_degree=1, include=None, preprocess=True):
+    default_preprocess_params = dict(
+        val_size = 0.0,
+        feature_degree = 1,
+        feature_scaling = True,
+        including_classes = None,
+        add_cluster_features = True,
+        shuffle = False
+    )
 
-        super().__init__(train_set, val_set, data_file, header, val_size,
-                         feature_cols, label_col, feature_degree, True,
-                         include, preprocess, True, False)
+    default_model_params = dict(
+        c=20, 
+        max_iter=10000, 
+        solver='liblinear',
+    )
 
-    def fit(self, c=20, max_iter=10000, solver='liblinear', verbose=False):
+    def __init__(self, **params):
+        default_params = {**self.default_preprocess_params, 
+                          **self.default_model_params}
+        default_params.update(params)
+
+        super().__init__(**default_params)
+
+        self.model_params['C'] = self.model_params.pop('c')
+        
+        estimator = LogisticRegression(**self.model_params, verbose=0)
+        self.model = OneVsRestClassifier(estimator=estimator)
+
+    def fit(self, X, y, verbose=False):
+        self.X_train, self.X_val, self.y_train, self.y_val = self.preprocess_data(X, y)
 
         if verbose:
             print('Using Logistic Regression Classfier...')
-
-        estimator = LogisticRegression(C=c, solver=solver, max_iter=max_iter,
-                                       verbose=0)
-
-        self.model = OneVsRestClassifier(estimator=estimator)
 
         self.model.fit(self.X_train, self.y_train)
 

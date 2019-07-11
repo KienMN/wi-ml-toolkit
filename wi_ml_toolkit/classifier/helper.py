@@ -8,56 +8,58 @@ from numpy.random import shuffle
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix
 
-def generate_features(data, radius, features='mean-std'):
+def generate_features(X, radius, features='mean-std'):
 
-    n, m = data.shape
+    n, m = X.shape
     interval = radius * 2 + 1
 
     if features == 'mean-std':
         new_features = np.zeros((n, m*2))
         for i in range(0, n):
             if i < radius:
-                tmp = data[0:interval]
+                tmp = X[0:interval]
             elif i >= n-radius:
-                tmp = data[n-interval:]
+                tmp = X[n-interval:]
             else:
-                tmp = data[i-radius : i+radius+1]
+                tmp = X[i-radius : i+radius+1]
             new_features[i] = np.concatenate((np.mean(tmp, axis=0), np.std(tmp, axis=0)))
 
     elif features == 'diff':
         new_features = np.zeros((n, m))
         for i in range(1, n):
-            new_features[i] = data[i] - data[i-1]
+            new_features[i] = X[i] - X[i-1]
 
     return new_features
 
-def add_features(data, trim=False, radius=3):
-    n, m = data.shape
+def add_features(X, trim=False, radius=3):
 
-    res = np.concatenate((data,
-                          generate_features(data, radius, features='mean-std'),
-                          # generate_features(data, radius, features='diff')
-                          ),
-                         axis=1)
+    X_processed = np.concatenate((X, 
+                                  generate_features(X, radius, features='mean-std'),
+                                  # generate_features(X, radius, features='diff'),
+                                  ),
+                                 axis=1)
     if trim:
-        return res[radius:-radius]
+        return X_processed[radius:-radius]
 
-    return res
+    return X_processed
 
-def filt_data(data, set, exclude=False):
-    if not set:
-        return data
-    return data[np.where(np.isin(data[:,-1], set, invert=exclude))]
+def filt_data(X, y, including_classes, exclude=False):
+    if not including_classes:
+        return X, y
+    
+    indices = np.where(np.isin(y, including_classes, invert=exclude))
+    
+    return X[indices], y[indices]
 
-def group_data(data, groups):
-    res = data.copy()
+def group_data(X, groups):
+    X_processed = X.copy()
     for i in range(len(data)):
         for j in range(len(groups)):
-            if res[i,-1] in groups[j]:
-                res[i,-1] = j
+            if X_processed[i,-1] in groups[j]:
+                X_processed[i,-1] = j
                 break
 
-    return res
+    return X_processed
 
 def mode(a):
     if isinstance(a, np.ndarray):
@@ -84,51 +86,53 @@ def smoothen(y, radius):
 
     return y
 
-def pre_process(data, clustering=False, trim=False, radius=3):
-    # return data
+def add_cluster_features(X, y, clustering=False, trim=False, radius=3):
 
-    n = len(data)
+    n = len(y)
     interval = 2 * radius + 1
-    res = None
+    X_processed = None
+    y_processed = None
 
     if clustering:
         start = 0
         i = 1
         while i <= n:
-            if i == n or data[start, -1] != data[i, -1]:
+            if i == n or y[start] != y[i]:
                 h = i - start
                 if h > interval - 1:
                     if trim:
                         end = i - interval + 1
                     else:
                         end = i
-                    tmp = np.concatenate((add_features(data[start:i, :-1], trim, radius),
-                                          data[start:end, -1].reshape(-1, 1)),
-                                         axis=1)
-                    if res is not None:
-                        res = np.append(res, tmp, axis=0)
+                    X_tmp = add_features(X[start:i], trim, radius)
+                    y_tmp = np.array([y[start]] * len(X_tmp))
+                    if X_processed is not None:
+                        X_processed = np.append(X_processed, X_tmp, axis=0)
+                        y_processed = np.append(y_processed, y_tmp)
                     else:
-                        res = tmp
+                        X_processed = X_tmp
+                        y_processed = y_tmp
 
                 start = i
             i += 1
     else:
-        res = np.concatenate((add_features(data[:, :-1], trim=False, radius=radius),
-                              data[:, -1].reshape(-1, 1)),
-                             axis=1)
+        X_processed = add_features(X, trim=False, radius=radius)
+        if trim:
+            y_processed = y[radius:-radius]
+        else:
+            y_processed = y
 
-    if res is None or (10*len(res) < n):
-        return data
+    if X_processed is None or (10*len(X_processed) < n):
+        return X, y
 
-    return res
+    return X_processed, y_processed
 
-def split_data(data, val_size=0.2, proportional=False, keep_order=False):
+def split_data(X, y, val_size=0.2, proportional=False, shuffle=False):
 
     if val_size == 0:
-        return data, data[:0]
+        return X, X[:0], y, y[:0]
 
     if proportional:
-        y = data[:,-1]
         sort_idx = np.argsort(y)
         val, start_idx= np.unique(y[sort_idx], return_index=True)
         indices = np.split(sort_idx, start_idx[1:])
@@ -138,23 +142,27 @@ def split_data(data, val_size=0.2, proportional=False, keep_order=False):
             n = len(idx_list)
             val_indices += idx_list[(sample(range(n), round(n*val_size)))].tolist()
 
-        train_set = np.delete(data, val_indices, axis=0)
-        if keep_order:
-            val_indices = sorted(val_indices)
-        else:
+        X_train = np.delete(X, val_indices, axis=0)
+        y_train = np.delete(y, val_indices, axis=0)
+        X_val = X[val_indices]
+        y_val = y[val_indices]
+
+        if shuffle:
             shuffle(val_indices)
             shuffle(train_set)
+        else:
+            val_indices = sorted(val_indices)
 
-        return train_set, data[val_indices]
+        return X_train, X_val, y_train, y_val
 
     else:
-        if keep_order:
-            n = len(data)
-            val_indices = (sample(range(n), round(n*val_size)))
-            val_indices = sorted(val_indices)
-            return np.delete(data, val_indices, axis=0), data[val_indices]
+        # if not shuffle:
+        #     n = len(X)
+        #     val_indices = (sample(range(n), round(n * val_size)))
+        #     val_indices = sorted(val_indices)
+        #     return np.delete(data, val_indices, axis=0), data[val_indices]
 
-        return train_test_split(data, test_size=val_size)
+        return train_test_split(X, y, test_size=val_size, shuffle=shuffle)
 
 def judge(predict, confidence, threshold, null_type=-9999):
     judgement = predict.copy().tolist()
