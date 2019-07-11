@@ -1,6 +1,6 @@
 import numpy as np
-
 from scipy.optimize import curve_fit
+
 from sympy.parsing.latex import parse_latex;
 from sympy import symbols, sin, cos, latex
 from sympy.utilities.lambdify import lambdify
@@ -23,12 +23,13 @@ def getModules():
 
 class NonLinearRegressor():
     def __init__(self, string_function, variables, parameters):
-        variable_list = [symbols(variable) for variable in variables]
-        parameter_list = [symbols(parameter) for parameter in parameters]
-        print(parameter_list)
+        self.variable_list = [symbols(variable) for variable in variables]
+        self.parameter_list = [symbols(parameter) for parameter in parameters]
+        self.string_function = string_function
+        # print(parameter_list)
         if 'e' in string_function:
             parameter_list.append(symbols('e'))
-        self.lambda_function = sympy2lambda(variable_list, parameter_list, string_function)
+        # self.lambda_function = sympy2lambda(variable_list, parameter_list, string_function)
         self.popt = None
         self.pcov = None
     
@@ -36,14 +37,17 @@ class NonLinearRegressor():
         xdata = np.array(X, dtype="float64")
         xdata = xdata.transpose()
         ydata = np.array(y, dtype="float64")
-        self.popt, self.pcov = curve_fit(self.lambda_function, xdata, ydata)
+        self.popt, self.pcov = curve_fit(self.get_lambda_function(), xdata, ydata)
         return self
 
     def predict(self, X):
         X = np.array(X)
         X = X.transpose()
-        y_pred = self.lambda_function(X, *self.popt)
+        y_pred = self.get_lambda_function()(X, *self.popt)
         return y_pred
+
+    def get_lambda_function(self):
+        return sympy2lambda(self.variable_list, self.parameter_list, self.string_function)
 
 def sympy2latex(sympyStringFunction=""):
     sympyFunction = parse_expr(sympyStringFunction)
@@ -62,4 +66,3 @@ def sympy2lambda(variables, parameters, sympyStringFunction, modules=getModules(
 
 def numpy_log(x, base):
     return np.log(x)/np.log(base)
-
