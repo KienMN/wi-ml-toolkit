@@ -13,7 +13,8 @@ class LogisticRegressionClassifier(Classifier):
         feature_scaling = True,
         including_classes = None,
         add_cluster_features = True,
-        shuffle = False
+        shuffle = False,
+        random_state = None,
     )
 
     default_model_params = dict(
@@ -30,8 +31,9 @@ class LogisticRegressionClassifier(Classifier):
         super().__init__(**default_params)
 
         self.model_params['C'] = self.model_params.pop('c')
-        
-        estimator = LogisticRegression(**self.model_params, verbose=0)
+
+        estimator = LogisticRegression(**self.model_params, verbose=0,
+                                       random_state=self.random_state)
         self.model = OneVsRestClassifier(estimator=estimator)
 
     def fit(self, X, y, verbose=False):

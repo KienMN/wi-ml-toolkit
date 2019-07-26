@@ -13,13 +13,14 @@ class KNearestNeighborsClassifier(Classifier):
         feature_scaling = True,
         including_classes = None,
         add_cluster_features = False,
-        shuffle = False
+        shuffle = False,
+        random_state = None,
     )
     
     default_model_params = dict(
         num_neighbors=100, 
         p=1,
-        metric='minkowski'
+        metric='minkowski',
     )
 
     def __init__(self, **params):

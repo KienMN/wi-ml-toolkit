@@ -13,7 +13,8 @@ class RandomForestClassifier(Classifier):
         feature_scaling = True,
         including_classes = None,
         add_cluster_features = False,
-        shuffle = False
+        shuffle = False,
+        random_state=None,
     )
 
     default_model_params = dict(
@@ -32,7 +33,7 @@ class RandomForestClassifier(Classifier):
         
         self.model_params['n_estimators'] = self.model_params.pop('num_trees')
 
-        self.model = Model(**self.model_params)
+        self.model = Model(**self.model_params, random_state=self.random_state)
 
     def fit(self, X, y, verbose=False):
         self.X_train, self.X_val, self.y_train, self.y_val = self.preprocess_data(X, y)
