@@ -28,6 +28,7 @@ class Classifier:
         self.including_classes = params.pop('including_classes')
         self.add_cluster_features = params.pop('add_cluster_features')
         self.shuffle = params.pop('shuffle') and self.add_cluster_features
+        self.random_state = params.pop('random_state')
         
         self.model_params = params
 
@@ -46,7 +47,10 @@ class Classifier:
         self.labels = [i for i in range(self.num_labels)]
         self.labels_origin = self.le.inverse_transform(self.labels).tolist()
 
-        X_train, X_val, y_train, y_val = split_data(X, y, self.val_size, self.shuffle)
+        X_train, X_val, y_train, y_val = split_data(X, y, 
+                                                    self.val_size, 
+                                                    self.shuffle, 
+                                                    self.random_state)
 
         if self.add_cluster_features:
             X_train, y_train = add_cluster_features(X_train, y_train)

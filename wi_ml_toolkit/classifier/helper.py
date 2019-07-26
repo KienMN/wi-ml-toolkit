@@ -4,7 +4,6 @@ import pandas as pd
 import seaborn as sns
 from random import sample
 import matplotlib.pyplot as plt
-from numpy.random import shuffle
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix
 
@@ -127,7 +126,8 @@ def add_cluster_features(X, y, clustering=False, trim=False, radius=3):
 
     return X_processed, y_processed
 
-def split_data(X, y, val_size=0.2, proportional=False, shuffle=False):
+def split_data(X, y, val_size=0.2, proportional=False, shuffle=False,
+               random_state=17):
 
     if val_size == 0:
         return X, X[:0], y, y[:0]
@@ -148,8 +148,10 @@ def split_data(X, y, val_size=0.2, proportional=False, shuffle=False):
         y_val = y[val_indices]
 
         if shuffle:
-            shuffle(val_indices)
-            shuffle(train_set)
+            np.random.seed(random_state)
+            np.random.shuffle(val_indices)
+            np.random.seed(random_state)
+            np.random.shuffle(train_set)
         else:
             val_indices = sorted(val_indices)
 

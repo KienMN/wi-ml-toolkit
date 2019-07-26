@@ -15,7 +15,8 @@ class NeuralNetworkClassifier(Classifier):
         feature_scaling = True,
         including_classes = None,
         add_cluster_features = True,
-        shuffle = False
+        shuffle = False,
+        random_state = None,
     )
     
     default_model_params = dict(
@@ -40,27 +41,28 @@ class NeuralNetworkClassifier(Classifier):
 
         super().__init__(**default_params)
 
-    def structure(self, hidden_layer_sizes=[10,20,10], activation='elu'):
+    def structure(self, hidden_layer_sizes=[10,20,10], activation='elu',
+                  random_state=None):
 
         self.model = Sequential()
 
         self.model.add(Dense(activation=activation,
                              input_dim=self.num_features,
                              units=hidden_layer_sizes[0],
-                             kernel_initializer=glorot_uniform(),
+                             kernel_initializer=glorot_uniform(seed=random_state),
                              kernel_regularizer=l1_l2(0.0),
                              use_bias=False))
 
         for layer in hidden_layer_sizes[1:]:
             self.model.add(Dense(activation=activation,
                                  units=layer,
-                                 kernel_initializer=glorot_uniform(),
+                                 kernel_initializer=glorot_uniform(seed=random_state),
                                  kernel_regularizer=l1_l2(0.0),
                                  use_bias=False))
 
         self.model.add(Dense(activation='softmax',
                              units=self.num_labels,
-                             kernel_initializer=glorot_uniform(),
+                             kernel_initializer=glorot_uniform(seed=random_state),
                              kernel_regularizer=l1_l2(0.0),
                              use_bias=False))
 
@@ -68,7 +70,8 @@ class NeuralNetworkClassifier(Classifier):
         self.X_train, self.X_val, self.y_train, self.y_val = self.preprocess_data(X, y)
 
         self.structure(hidden_layer_sizes=self.model_params.pop('hidden_layer_sizes'),
-                       activation=self.model_params.pop('activation'))
+                       activation=self.model_params.pop('activation'),
+                       random_state=self.random_state)
         
         return self.__fit(verbose=verbose, **self.model_params)
 
