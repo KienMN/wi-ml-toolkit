@@ -69,11 +69,15 @@ class NeuralNetworkClassifier(Classifier):
     def fit(self, X, y, verbose=False):
         self.X_train, self.X_val, self.y_train, self.y_val = self.preprocess_data(X, y)
 
-        self.structure(hidden_layer_sizes=self.model_params.pop('hidden_layer_sizes'),
-                       activation=self.model_params.pop('activation'),
-                       random_state=self.random_state)
+        if hasattr(self, 'model'):
+            self.structure(hidden_layer_sizes=self.model_params['hidden_layer_sizes'],
+                           activation=self.model_params['activation'],
+                           random_state=self.random_state)
+
+        train_params = {k: v for k, v in self.model_params.items() 
+                        if k not in ['hidden_layer_sizes', 'activation']}
         
-        return self.__fit(verbose=verbose, **self.model_params)
+        return self.__fit(verbose=verbose, **train_params)
 
     def __fit(self, algorithm='backprop', batch_size=None, num_epochs=10000,
               optimizer='nadam', learning_rate=0.001, warm_up=False, decay=1e-6,
