@@ -41,7 +41,7 @@ class NonLinearRegressor():
         return self
 
     def predict(self, X):
-        X = np.array(X)
+        X = np.array(X, dtype="float64")
         X = X.transpose()
         y_pred = self.get_lambda_function()(X, *self.popt)
         return y_pred
