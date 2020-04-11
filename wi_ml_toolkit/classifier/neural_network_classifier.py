@@ -126,7 +126,7 @@ class NeuralNetworkClassifier(Classifier):
             print('\nTraining Neural Network with back propagation...\n')
 
         self.model.compile(optimizer=optimizer, loss='categorical_crossentropy',
-                           metrics=['accuracy'])
+                           metrics=['acc'])
 
         es = keras.callbacks.EarlyStopping(monitor='val_loss', min_delta=0,
                                            patience=32, verbose=0, mode='auto')
@@ -173,7 +173,7 @@ class NeuralNetworkClassifier(Classifier):
 
         self.model.compile(optimizer=optimizer,
                            loss='categorical_crossentropy',
-                           metrics=['accuracy'])
+                           metrics=['acc'])
 
         num_w = 0
         w = []
@@ -394,6 +394,6 @@ class NeuralNetworkClassifier(Classifier):
         classifier.model = load_model(os.path.join(model_dir, 'architecture'))
         classifier.model.load_weights(os.path.join(model_dir, 'weights'))
         classifier.model.compile(optimizer='adamax', loss='categorical_crossentropy',
-                                 metrics=['accuracy'])
+                                 metrics=['acc'])
 
         return classifier
